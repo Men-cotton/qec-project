@@ -1,0 +1,9 @@
+python simple_plot.py 3 \
+LookUp/Knill_CNOT_D5/2018-01-28-23-28-42.json LU-FF2
+
+python simple_plot.py 3 \
+PureError/Knill_CNOT_D5/2018-01-25-14-26-04.json PE-FF2
+
+python simple_plot.py 3 \
+LookUp/Knill_CNOT_D5/2018-01-28-23-28-42.json LU-FF2 \
+PureError/Knill_CNOT_D5/2018-01-25-14-26-04.json PE-FF2

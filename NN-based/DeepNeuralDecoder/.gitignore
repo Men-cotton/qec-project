@@ -1,0 +1,8 @@
+local/*
+local:*
+.DS_Store
+*.pyc
+BayesOpt/*
+BayesOpt
+.ipynb_checkpoints/*
+sftp-config.json

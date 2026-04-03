@@ -1,0 +1,15 @@
+python poly_plot.py 3 \
+PureError/Steane_CNOT_D5/2018-01-18-00-19-44.json PE-FF2 \
+PureError/Steane_CNOT_D5/2018-01-25-21-19-09.json PE-RNN
+
+python poly_plot.py 3 \
+LookUp/Steane_CNOT_D5/2018-01-16-21-42-05.json LU-FF2 \
+LookUp/Steane_CNOT_D5/2018-01-27-20-49-40.json LU-RNN
+
+python poly_plot.py 3 \
+LookUp/Steane_CNOT_D5/2018-01-16-21-42-05.json LU-FF2 \
+PureError/Steane_CNOT_D5/2018-01-18-00-19-44.json PE-FF2
+
+python poly_plot.py 3 \
+PureError/Steane_CNOT_D5/2018-01-18-00-19-44.json PE-FF2 \
+PureError/Steane_CNOT_D5/cross.json PE-FF2-cross-trained

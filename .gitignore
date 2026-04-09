@@ -1,3 +1,4 @@
 graph/
 .codex
 __pycache__/
+*.pt

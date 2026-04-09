@@ -5,4 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "matplotlib>=3.10.8",
     "stim>=1.15.0",
+    "torch>=2.11.0",
+    "torch-geometric>=2.7.0",
+    "tqdm>=4.67.3",
 ]

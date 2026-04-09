@@ -1,4 +1,4 @@
-graph/
+graph/graph_data_*
 .codex
 __pycache__/
 *.pt

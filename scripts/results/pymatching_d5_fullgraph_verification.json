@@ -1,0 +1,514 @@
+{
+  "config": {
+    "inputs": [
+      "graph/graph_data_d5_r5_case_*.json"
+    ],
+    "graph_kind": "full"
+  },
+  "counts": {
+    "decoded": 98,
+    "skipped": 2,
+    "errors": 0,
+    "weight_match_count": 98,
+    "exact_match_count": 88
+  },
+  "skipped": [
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_34.json",
+      "reason": "graph contains neither nodes nor edges"
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_83.json",
+      "reason": "graph contains neither nodes nor edges"
+    }
+  ],
+  "errors": [],
+  "mismatches": [
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_20.json",
+      "stored_weight": 5.0,
+      "decoded_weight": 5.0,
+      "stored_matching": [
+        [
+          13,
+          16
+        ],
+        [
+          15,
+          76
+        ],
+        [
+          25,
+          28
+        ],
+        [
+          27,
+          29
+        ],
+        [
+          50,
+          111
+        ]
+      ],
+      "decoded_matching": [
+        [
+          13,
+          25
+        ],
+        [
+          15,
+          76
+        ],
+        [
+          16,
+          28
+        ],
+        [
+          27,
+          29
+        ],
+        [
+          50,
+          111
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_31.json",
+      "stored_weight": 7.0,
+      "decoded_weight": 7.0,
+      "stored_matching": [
+        [
+          2,
+          4
+        ],
+        [
+          18,
+          24
+        ],
+        [
+          45,
+          54
+        ],
+        [
+          51,
+          112
+        ],
+        [
+          58,
+          119
+        ]
+      ],
+      "decoded_matching": [
+        [
+          2,
+          4
+        ],
+        [
+          18,
+          24
+        ],
+        [
+          45,
+          106
+        ],
+        [
+          51,
+          54
+        ],
+        [
+          58,
+          119
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_33.json",
+      "stored_weight": 7.0,
+      "decoded_weight": 7.0,
+      "stored_matching": [
+        [
+          2,
+          4
+        ],
+        [
+          19,
+          26
+        ],
+        [
+          39,
+          51
+        ],
+        [
+          56,
+          58
+        ],
+        [
+          60,
+          121
+        ]
+      ],
+      "decoded_matching": [
+        [
+          2,
+          4
+        ],
+        [
+          19,
+          80
+        ],
+        [
+          26,
+          87
+        ],
+        [
+          39,
+          51
+        ],
+        [
+          56,
+          58
+        ],
+        [
+          60,
+          121
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_40.json",
+      "stored_weight": 7.0,
+      "decoded_weight": 7.0,
+      "stored_matching": [
+        [
+          4,
+          8
+        ],
+        [
+          7,
+          19
+        ],
+        [
+          12,
+          73
+        ],
+        [
+          44,
+          45
+        ],
+        [
+          48,
+          60
+        ],
+        [
+          57,
+          59
+        ]
+      ],
+      "decoded_matching": [
+        [
+          4,
+          8
+        ],
+        [
+          7,
+          19
+        ],
+        [
+          12,
+          73
+        ],
+        [
+          44,
+          59
+        ],
+        [
+          45,
+          48
+        ],
+        [
+          57,
+          60
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_49.json",
+      "stored_weight": 6.0,
+      "decoded_weight": 6.0,
+      "stored_matching": [
+        [
+          1,
+          28
+        ],
+        [
+          2,
+          14
+        ],
+        [
+          6,
+          9
+        ],
+        [
+          41,
+          45
+        ]
+      ],
+      "decoded_matching": [
+        [
+          1,
+          62
+        ],
+        [
+          2,
+          14
+        ],
+        [
+          6,
+          9
+        ],
+        [
+          28,
+          89
+        ],
+        [
+          41,
+          45
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_62.json",
+      "stored_weight": 6.0,
+      "decoded_weight": 6.0,
+      "stored_matching": [
+        [
+          8,
+          20
+        ],
+        [
+          12,
+          73
+        ],
+        [
+          15,
+          76
+        ],
+        [
+          39,
+          41
+        ],
+        [
+          58,
+          119
+        ],
+        [
+          59,
+          120
+        ]
+      ],
+      "decoded_matching": [
+        [
+          8,
+          20
+        ],
+        [
+          12,
+          73
+        ],
+        [
+          15,
+          76
+        ],
+        [
+          39,
+          41
+        ],
+        [
+          58,
+          59
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_63.json",
+      "stored_weight": 3.0,
+      "decoded_weight": 3.0,
+      "stored_matching": [
+        [
+          2,
+          5
+        ],
+        [
+          14,
+          17
+        ],
+        [
+          53,
+          57
+        ]
+      ],
+      "decoded_matching": [
+        [
+          2,
+          14
+        ],
+        [
+          5,
+          17
+        ],
+        [
+          53,
+          57
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_67.json",
+      "stored_weight": 3.0,
+      "decoded_weight": 3.0,
+      "stored_matching": [
+        [
+          2,
+          63
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          52,
+          56
+        ]
+      ],
+      "decoded_matching": [
+        [
+          2,
+          5
+        ],
+        [
+          3,
+          64
+        ],
+        [
+          52,
+          56
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_84.json",
+      "stored_weight": 6.0,
+      "decoded_weight": 6.0,
+      "stored_matching": [
+        [
+          2,
+          63
+        ],
+        [
+          7,
+          19
+        ],
+        [
+          20,
+          22
+        ],
+        [
+          31,
+          43
+        ],
+        [
+          34,
+          46
+        ],
+        [
+          53,
+          56
+        ]
+      ],
+      "decoded_matching": [
+        [
+          2,
+          63
+        ],
+        [
+          7,
+          19
+        ],
+        [
+          20,
+          22
+        ],
+        [
+          31,
+          34
+        ],
+        [
+          43,
+          46
+        ],
+        [
+          53,
+          56
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    },
+    {
+      "path": "/home/mencotton/qec-project/graph/graph_data_d5_r5_case_94.json",
+      "stored_weight": 4.0,
+      "decoded_weight": 4.0,
+      "stored_matching": [
+        [
+          29,
+          38
+        ],
+        [
+          33,
+          35
+        ],
+        [
+          51,
+          112
+        ]
+      ],
+      "decoded_matching": [
+        [
+          29,
+          33
+        ],
+        [
+          35,
+          96
+        ],
+        [
+          38,
+          99
+        ],
+        [
+          51,
+          112
+        ]
+      ],
+      "weight_matches": true,
+      "exact_matches": false
+    }
+  ]
+}

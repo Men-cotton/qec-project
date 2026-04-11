@@ -101,11 +101,6 @@
   - 根拠: `gnn_train.py` / top-level script
   - 根拠: `gnn_test.py` / top-level script
   - 判定: 推論
-- main pipeline は open boundary の planar patch を想定している可能性が高い。
-  - 理由: 使用クラス名が `RotatedPlanar2DCode` であり、repo 内独自 rotated code 生成でも境界 check を明示追加している。
-  - 根拠: `gnn_train.py` / top-level script
-  - 根拠: `codes_q.py` / `create_rotated_surface_codes`
-  - 判定: 推論
 - repo 内に XZZX, rectangular rotated patch, lattice surgery 用 patch composition の明示実装は見つからない。
   - 根拠: repo 全文検索結果
   - 判定: 未実装か対象外かは未確定。少なくとも repo 内に明示証拠はない。
@@ -114,7 +109,7 @@
 
 | code family | patch shape | single/multi logical qubit | boundaries | odd distance restriction | repeated syndrome rounds | measurement error support | active correction support | lattice surgery | benchmark scripts | neural decoder |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Rotated planar 2D (main pipeline; PanQEC `RotatedPlanar2DCode`) | square のみと推定 | single logical と推定 | open planar と推定 | 未確認 | なし | なし | なし | なし | あり (`gnn_test.py`, `gnn_osd.py`) | あり (`GNNDecoder`) |
+| Rotated planar 2D (main pipeline; PanQEC `RotatedPlanar2DCode`) | square のみと推定 | single logical と推定 | open planar | 未確認 | なし | なし | なし | なし | あり (`gnn_test.py`, `gnn_osd.py`) | あり (`GNNDecoder`) |
 | Rotated surface constructor (`create_rotated_surface_codes`) | square | 未確認 | 境界 check あり | あり (odd `n` 限定) | なし | なし | なし | なし | なし | なし |
 | Hypergraph-product surface constructor (`create_surface_codes`) | square | コメント上は `k=1` | 未確認 | 未確認 | なし | なし | なし | なし | なし | なし |
 | Checkerboard toric constructor (`create_checkerboard_toric_codes`) | square periodic | toric なので multi logical の可能性が高いが repo 内では未確認 | periodic と推定 | even `n` 限定 | なし | なし | なし | なし | なし | なし |
@@ -510,3 +505,307 @@
   - 根拠: `gnn_test.py` / top-level script
   - 根拠: `gnn_osd.py` / top-level script
   - 根拠: `gnn_train.py` / top-level script
+
+## 7. 追補: 「シンドロームグラフからマッチングを出力する過程」に限定した整理
+
+この節は `NN-based/PLANS.md` の指示に合わせ、Astra repo のうち「シンドロームグラフからマッチングを出力する過程」だけを再整理したものである。重要なのは、repo 内で明示的に実装されているグラフは GNN 用 Tanner graph であり、MWPM 用の detection graph / decoding graph 自体は repo 内で直接は実装されていない、という点である。
+
+### 7.1 対象となるグラフ構造と実装範囲
+
+#### 結論
+
+- この repo はシンドロームグラフ上のマッチング処理を**独自実装していない**が、`panqec.decoders.MatchingDecoder` を呼ぶ形で**ラップしている**。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_test.py` / top-level script
+- repo 内で明示的に構築しているグラフは、GNN message passing 用の Tanner graph である。
+  - 根拠: `panq_functions.py` / `surface_code_edges`, `collate`
+- マッチング対象の surface code は、main pipeline では `surface_2d.RotatedPlanar2DCode(dist)` に限定される。
+  - 根拠: `gnn_test.py` / top-level script
+  - 根拠: `gnn_osd.py` / top-level script
+
+#### 明示的記述
+
+- `gnn_test.py` は `mwpm_decoder = MatchingDecoder(code, error_model, error_rate=err_rate)` を生成し、`logical_error_rate(..., enable_osd=enable_osd, osd_decoder=mwpm_decoder)` に渡す。
+  - 根拠: `gnn_test.py` / top-level script
+- `panq_functions.osd` は residual syndrome が残るサンプルに対し、各サンプルごとに `MatchingDecoder(code, osd_decoder.error_model, osd_decoder.error_rate, weights=(fllrx[i], fllrz[i]))` を再構築し、`dec.decode(final_syn[i])` を呼ぶ。
+  - 根拠: `panq_functions.py` / `osd`
+- グラフ生成関数 `surface_code_edges(code)` は `code.stabilizer_matrix.nonzero()` から source/destination index を作り、双方向 edge を加えた `nx.DiGraph` 相当の接続を返す。
+  - 根拠: `panq_functions.py` / `surface_code_edges`
+
+#### 推論
+
+- repo の「マッチング機能」は、Astra 自身が syndrome graph を持つのではなく、`code`, `syndrome`, `weights` を PanQEC decoder に渡す薄い adapter 層として実装されている。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_test.py` / top-level script
+- main pipeline の matching 対象グラフは、2D rotated planar CSS surface code に付随する X/Z 分離グラフである可能性が高い。
+  - 理由: `final_syn`, `fllrx`, `fllrz`, `code.Hx`, `code.Hz` がすべて X/Z 分離で扱われているため。
+  - 根拠: `panq_functions.py` / `osd`, `logical_error_rate`
+  - 根拠: `gnn_osd.py` / `osd`, `logical_error_rate_osd`
+
+#### 外部実装の追加検証 (`uv run`)
+
+- `MatchingDecoder` は PyMatching ベースであり、docstring でも "Matching decoder for 2D Toric Code, based on PyMatching" と明記されている。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder`
+- `MatchingDecoder.allowed_codes = ["Toric2DCode", "Planar2DCode", "RotatedPlanar2DCode"]` であり、planar/rotated planar を明示的に許可している。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder`
+- 小さな実行確認では、`RotatedPlanar2DCode(3)` に対して `matcher_x`, `matcher_z` とも `4 detectors, 1 boundary node, and 7 edges` を持つ PyMatching object として構築された。
+  - 根拠: `uv run python` による `MatchingDecoder(surface_2d.RotatedPlanar2DCode(3), ...)` の実行結果
+
+#### 更新後の判定
+
+- boundary node の扱いは、Astra repo のローカル実装ではなく、PanQEC `MatchingDecoder` が PyMatching matcher を構築する段階で実現されている。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder.__init__`
+  - 根拠: `uv run python` による `matcher_x`/`matcher_z` 表示
+
+### 7.2 Capability Matrix
+
+| Scope | Graph dimension (2D/3D) | Boundary node support | Weighted edges support | Hyperedge support (for correlated/Y errors) | Dynamic graph generation | Parallel matching support |
+| --- | --- | --- | --- | --- | --- | --- |
+| Local repo の明示実装 (`surface_code_edges`, `collate`) | 2D のみ | 明示なし | なし | なし | あり (`code.stabilizer_matrix` から生成) | なし |
+| Matching 呼び出し層 (`panq_functions.py` / `osd`) | 2D | あり (PyMatching matcher 上に boundary node を生成) | あり (`weights=(fllrx[i], fllrz[i])`) | なし | あり (`code` と `final_syn` から decoder を都度生成) | なし |
+| BP/OSD 呼び出し層 (`gnn_osd.py` / `osd`) | 2D のみと推定 | 未確認 | あり (`set_log_prob`) | なし | あり (`final_syn` ごとに decode) | なし |
+
+#### Matrix の補足
+
+- `Graph dimension (2D/3D)`
+  - 明示的記述:
+    - main pipeline は `surface_2d.RotatedPlanar2DCode(dist)` を使う。
+    - `size = 2 * d ** 2 - 1`、`error_index = d ** 2 - 1` に固定される。
+    - 根拠: `gnn_test.py` / top-level script
+    - 根拠: `gnn_osd.py` / top-level script
+    - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`, `logical_error_rate`, `osd`
+  - 推論:
+    - 3D 時空間 graph や repeated rounds を扱う実装ではない。
+- `Boundary node support`
+  - 明示的記述:
+    - local repo には matching graph の boundary node を生成・操作するコードがない。
+    - PanQEC `MatchingDecoder` は `RotatedPlanar2DCode` を許可し、`RotatedPlanar2DCode(3)` で生成した `matcher_x`, `matcher_z` はどちらも `1 boundary node` を持つ。
+    - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder`
+    - 根拠: `uv run python` による `matcher_x`/`matcher_z` 表示
+  - 推論:
+    - boundary node は PyMatching の内部 graph 表現として管理され、Astra repo 側の Python コードからは明示的 node ID としては触られていない。
+- `Weighted edges support`
+  - 明示的記述:
+    - `weights=(fllrx[i], fllrz[i])` が `MatchingDecoder` に渡される。
+    - `init_log_probs_of_decoder` で BP/OSD decoder に qubit-wise log-prob を注入する。
+    - 根拠: `panq_functions.py` / `osd`, `init_log_probs_of_decoder`
+    - 根拠: `gnn_osd.py` / `osd`, `init_log_probs_of_decoder`
+    - PanQEC 側では `weights is None` のとき `error_model.get_weights(code, error_rate)` を使い、`Matching(self.code.Hz, spacelike_weights=wx)` と `Matching(self.code.Hx, spacelike_weights=wz)` を構築する。
+    - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder.__init__`
+- `Hyperedge support (for correlated/Y errors)`
+  - 明示的記述:
+    - Y は 4 値ラベル `3` として表現されるが、後段では X/Z に分解される。
+    - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`, `osd`, `logical_error_rate`
+    - 根拠: `gnn_osd.py` / `osd`
+  - 推論:
+    - correlated Y を 1 個の hyperedge として処理する実装ではない。
+- `Dynamic graph generation`
+  - 明示的記述:
+    - GNN 用 graph は `surface_code_edges(code)` が `code.stabilizer_matrix.nonzero()` から生成する。
+    - matching 呼び出しも `err_rate` と sample ごとの `weights` から decoder を動的に作り直す。
+    - 根拠: `panq_functions.py` / `surface_code_edges`, `osd`
+    - 根拠: `gnn_test.py` / top-level script
+- `Parallel matching support`
+  - 明示的記述:
+    - matching decode は `for i in nonzero_syn_id:` の逐次 loop で呼ばれる。
+    - 根拠: `panq_functions.py` / `osd`
+    - 根拠: `gnn_osd.py` / `osd`
+  - 推論:
+    - matching solver 自体の内部並列性は未確認だが、repo 側にバッチ並列 matching の明示実装はない。
+
+### 7.3 グラフ構築とエッジ重みの計算
+
+#### 7.3.1 グラフ構築
+
+#### 明示的記述
+
+- local repo が構築するのは syndrome graph ではなく Tanner graph である。
+  - `surface_code_edges(code)` は `code.stabilizer_matrix.nonzero()` を source/destination index に変換し、stabilizer node と data-qubit node の双方向 edge を返す。
+  - 根拠: `panq_functions.py` / `surface_code_edges`
+- シンドローム入力は `generate_syndrome_error_volume` が `code.measure_syndrome(error).T` から作る。
+  - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`
+- `final_syn` は `targets` の syndrome 部分から再構成され、前半をそのまま、後半を `// 2` して X/Z の 2 値 syndrome に戻している。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_osd.py` / `osd`
+
+#### 推論
+
+- GNN 入力としての graph は parity-check matrix 由来の Tanner graph であり、MWPM 用 decoding graph を Astra が自前で構築しているわけではない。
+  - 根拠: `panq_functions.py` / `surface_code_edges`, `osd`
+- code-capacity (2D) と matching が結びつく境界は `final_syn` と `code` オブジェクトであり、edge 接続や shortest-path metric の構築は外部 decoder 側に委ねられている。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder.__init__`
+
+#### 7.3.2 ノイズモデルの反映
+
+#### 明示的記述
+
+- `generate_syndrome_error_volume` は 1 回の Pauli error を生成し、単発 syndrome を測るだけである。
+  - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`
+- `for_training=False` のとき、error は `errorxz = error[:, :d**2] + 2 * error[:, d**2:]` で 4 値にエンコードされる。
+  - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`
+- syndrome は `syndromexz = np.append(syndrome[:, :(d ** 2 - 1) // 2], 2 * syndrome[:, (d ** 2 - 1) // 2:], axis=1)` により前半/後半を区別して保存される。
+  - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`
+
+#### 推論
+
+- code capacity と phenomenological / circuit-level の差を local repo が graph topology に反映している証拠はない。時間方向ノードや測定誤りエッジが存在しないため、実装範囲は code-capacity 2D に留まる。
+  - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`, `adapt_trainset`
+- エッジ重みは syndrome graph 上の edge weight として repo 内に保持されるのではなく、qubit-wise の log-likelihood 相当量 `fllrx`, `fllrz` として decoder に渡される。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_osd.py` / `osd`
+- `fllrx = -log((P(X)+P(Y))/P(I))`, `fllrz = -log((P(Z)+P(Y))/P(I))` という計算で、Y を X/Z 双方へ射影している。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_osd.py` / `osd`
+- PanQEC の既定重みも `weights_x = -log((px+py)/(1-(px+py)))`, `weights_z = -log((pz+py)/(1-(pz+py)))` で計算される。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/error_models/_base_error_model.py` / `BaseErrorModel.get_weights`
+- 整数重みへの丸めや edge-list 形式での永続化は見当たらない。PyMatching には `spacelike_weights` として浮動小数ベクトルが渡される。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder.__init__`
+
+### 7.4 マッチングアルゴリズムの概要
+
+#### 明示的記述
+
+- repo 内で明示される matching solver は `panqec.decoders.MatchingDecoder` だけである。
+  - 根拠: `gnn_test.py` / top-level script
+  - 根拠: `panq_functions.py` / `osd`
+- もう 1 つの 2 段目ソルバは `BeliefPropagationOSDDecoder` であり、これは matching ではなく BP/OSD 系である。
+  - 根拠: `gnn_osd.py` / top-level script, `osd`
+- `requirements.txt` には `panqec==0.1.6` と `PyMatching==2.0.1` が含まれる。
+  - 根拠: `requirements.txt`
+- `MatchingDecoder` は実際に `from pymatching import Matching` を import し、CSS code の `Hz` と `Hx` をそれぞれ別 matcher に渡している。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder`
+
+#### 推論
+
+- Astra repo 自身は MWPM / blossom / union-find をスクラッチ実装していない。matching のコアは外部ライブラリ依存である。
+  - 根拠: `panq_functions.py`, `gnn_test.py`, `gnn_osd.py` に local matching 実装が存在しない
+- コア matching アルゴリズムの具体名は PyMatching backend に委ねられており、Astra repo 自身のコードからはそれ以上は分からない。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder`
+- グラフ理論的に見ると、この repo が行っているのは「GNN が各 data qubit の事後確率を出し、その確率を X/Z 独立の重みへ変換して外部ソルバへ渡す」という前処理・再重み付けである。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_osd.py` / `osd`
+
+### 7.5 入出力インターフェースとデータ構造
+
+#### 7.5.1 入力データ: グラフ
+
+- GNN 用 graph 表現
+  - データ構造: `src_ids`, `dst_ids` の 1 次元 index 配列
+  - 生成関数: `surface_code_edges(code)`
+  - 型: `numpy.ndarray` として生成し、その後 `torch.LongTensor` に変換
+  - 根拠: `panq_functions.py` / `surface_code_edges`
+  - 根拠: `gnn_test.py` / top-level script
+- matching 用 graph 表現
+  - 明示的記述:
+    - local repo 内に adjacency list, CSR, NetworkX graph として syndrome graph を持つコードはない。
+  - 推論:
+    - matching graph は `MatchingDecoder` の内部表現に隠蔽されている。
+
+#### 7.5.2 入力データ: シンドローム
+
+- raw syndrome 生成
+  - 関数: `generate_syndrome_error_volume(code, error_model, p, batch_size, for_training=True)`
+  - データ構造: `np.ndarray` shape `(batch_size, 2 * d**2 - 1)`
+  - 内容: `[encoded_syndrome, encoded_error]`
+  - 根拠: `panq_functions.py` / `generate_syndrome_error_volume`
+- GNN 入力
+  - 関数: `adapt_trainset(batch, code, num_classes=2, for_training=True)`
+  - データ構造: syndrome 部分を one-hot 化した `inputs_all` と target
+  - 根拠: `panq_functions.py` / `adapt_trainset`
+- matching solver 入力
+  - 関数: `panq_functions.osd(outputs, targets, code, osd_decoder=None)`
+  - データ構造: `final_syn[i]` は 1 サンプル分の 1 次元 `numpy.ndarray`
+  - 生成法: `targets` の syndrome 部分を取り出し、後半を `// 2` して 2 値 syndrome に戻す
+  - 根拠: `panq_functions.py` / `osd`
+- BP/OSD solver 入力
+  - 関数: `gnn_osd.py` / `osd(outputs, targets, code, hx, hz, osd_decoder=None)`
+  - データ構造: 同じく `final_syn[i]` の 1 次元 `numpy.ndarray`
+  - 根拠: `gnn_osd.py` / `osd`
+
+#### 7.5.3 出力データ
+
+- `MatchingDecoder.decode(final_syn[i])` の出力
+  - 明示的記述:
+    - 戻り値 `osd_err` は `osd_err[:code.d ** 2] + 2 * osd_err[code.d ** 2:]` により 4 値 qubit label へ再エンコードされる。
+    - 根拠: `panq_functions.py` / `osd`
+    - PanQEC 側では `decode(self, syndrome: np.ndarray, **kwargs) -> np.ndarray` と型注釈され、`correction = np.zeros(2*self.code.n, dtype=np.uint)` を返す。
+    - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/matching/_matching_decoder.py` / `MatchingDecoder.decode`
+    - `uv run` の実行確認でも `RotatedPlanar2DCode(3)` に対して出力長は `18 = 2*n` だった。
+    - 根拠: `uv run python` による `mwpm.decode(np.zeros(...))` の実行結果
+- `BeliefPropagationOSDDecoder.decode(final_syn[i])` の出力
+  - 明示的記述:
+    - 戻り値 `osd_err` は `osd_err[:code.n]` と `osd_err[code.n:]` に分割され、`osd_err_x`, `osd_err_z` に入る。
+    - 根拠: `gnn_osd.py` / `osd`
+    - PanQEC 側では `decode(self, syndrome: np.ndarray, **kwargs) -> np.ndarray` と型注釈され、CSS code では `correction = np.concatenate([x_correction, z_correction])` を返す。
+    - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/belief_propagation/bposd_decoder.py` / `BeliefPropagationOSDDecoder.decode`
+    - `uv run` の実行確認でも出力長は `18 = 2*n` だった。
+    - 根拠: `uv run python` による `bp.decode(np.zeros(...))` の実行結果
+- 最終評価出力
+  - 関数: `logical_error_rate(...)`, `logical_error_rate_osd(...)`
+  - 戻り値:
+    - 第 1 戻り値: logical error rate
+    - 第 2 戻り値: codespace error rate
+    - 第 3 戻り値: その OR
+  - 根拠: `panq_functions.py` / `logical_error_rate`
+  - 根拠: `gnn_osd.py` / `logical_error_rate_osd`
+
+#### 7.5.4 コア関数・クラスのシグネチャ
+
+- local 関数
+  - `surface_code_edges(code)`
+  - `generate_syndrome_error_volume(code, error_model, p, batch_size, for_training=True)`
+  - `adapt_trainset(batch, code, num_classes=2, for_training=True)`
+  - `logical_error_rate(gnn, testloader, code, enable_osd=False, osd_decoder=None)`
+  - `osd(outputs, targets, code, osd_decoder=None)` in `panq_functions.py`
+  - `logical_error_rate_osd(gnn, testloader, code, osd_decoder=None, enable_osd=False)`
+  - `osd(outputs, targets, code, hx, hz, osd_decoder=None)` in `gnn_osd.py`
+- external class call sites から確認できる範囲
+  - `MatchingDecoder(code: StabilizerCode, error_model: BaseErrorModel, error_rate: float, error_type: Optional[str] = None, weights: Optional[Tuple[np.ndarray, np.ndarray]] = None)`
+  - `MatchingDecoder.decode(self, syndrome: np.ndarray, **kwargs) -> np.ndarray`
+  - `BeliefPropagationOSDDecoder(code: StabilizerCode, error_model: BaseErrorModel, error_rate: float, max_bp_iter: int = 1000, channel_update: bool = False, osd_order: int = 10, bp_method: str = 'minimum_sum')`
+  - `BeliefPropagationOSDDecoder.decode(self, syndrome: np.ndarray, **kwargs) -> np.ndarray`
+  - 根拠: `uv run python` による `inspect.signature(...)` の取得結果
+
+### 7.6 Neural network 系アルゴリズムの適用
+
+#### 明示的記述
+
+- GNN は Tanner graph 上で message passing を行い、各 data qubit に対して 4 値 logits を出力する。
+  - 根拠: `panq_functions.py` / `GNNDecoder.forward`
+- matching 段で NN が直接予測しているのは matching edge ではなく qubit-wise の誤り事後確率である。
+  - 根拠: `panq_functions.py` / `osd`
+- `softmax` 後の確率から `fllrx`, `fllrz` が計算され、matching/BP-OSD の入力重みに変換される。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_osd.py` / `osd`
+- PanQEC / BP-OSD 側でも channel input は edge list ではなく qubit-wise probability / log-prob vector であり、`x_decoder` と `z_decoder` に separate に渡される。
+  - 根拠: `.venv/lib/python3.12/site-packages/panqec/decoders/belief_propagation/bposd_decoder.py` / `BeliefPropagationOSDDecoder.decode`
+  - 根拠: `uv run python` による `dir(dec.x_decoder)` 確認結果 (`channel_probs`, `log_prob_ratios`, `update_channel_probs`)
+
+#### 推論
+
+- この repo における NN の役割は「syndrome graph 上の matching edge を直接分類すること」ではなく、「data qubit ごとの local likelihood を推定し、外部 decoder のコスト関数を再重み付けすること」である。
+  - 根拠: `panq_functions.py` / `osd`
+  - 根拠: `gnn_osd.py` / `osd`
+- テンソル化の単位は syndrome graph ではなく Tanner graph node である。入力は syndrome node の one-hot 特徴量と data-qubit node のゼロ埋め特徴量から成る。
+  - 根拠: `panq_functions.py` / `adapt_trainset`, `collate`, `GNNDecoder.forward`
+
+### 7.7 マッチング処理のパフォーマンス・ベンチマーク
+
+#### 明示的記述
+
+- `gnn_test.py` は `t1`, `t2` を計測し、`le_rates[i, 4] = t2 - t1` を保存している。
+  - 根拠: `gnn_test.py` / top-level script
+- その区間には `logical_error_rate(...)` が含まれ、`enable_osd=True` の場合は `MatchingDecoder` を用いた 2 段目 decode もこの時間に含まれる。
+  - 根拠: `gnn_test.py` / top-level script
+  - 根拠: `panq_functions.py` / `logical_error_rate`, `osd`
+- README が前面に出している評価指標は logical error rate であり、matching solver 単体の runtime/memory/cost-gap ではない。
+  - 根拠: `README.md` / 本文
+
+#### 推論
+
+- 「マッチングソルバ単体の性能評価」は repo 内では主目的ではない。存在する時間計測は end-to-end の LER 計算時間であり、matching 部分だけを分離して評価してはいない。
+  - 根拠: `gnn_test.py` / top-level script
+  - 根拠: `gnn_osd.py` / top-level script
+- グラフサイズ依存の scaling、syndrome 密度依存の runtime、メモリ使用量、厳密解とのコスト差を測るスクリプトは未確認。
+  - 根拠: repo 全体検索結果

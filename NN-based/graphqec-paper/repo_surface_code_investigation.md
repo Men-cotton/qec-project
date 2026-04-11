@@ -1,361 +1,243 @@
-# Repo Investigation: Surface-Code Related Support in `graphqec-paper`
+# Repo Investigation: Syndrome Graph to Matching Output in `graphqec-paper`
 
 更新方針:
-- このファイルは調査段階ごとに追記する。
-- 各主張について、根拠ファイルと関数/クラス名を併記する。
-- `明示的記述` と `推論` を分離する。
-- 根拠がない場合は `未確認` と書く。
+- このファイルは「シンドロームグラフからマッチングを出力する過程」に絞る。
+- 各主張では `明示的記述` と `推論` と `未確認` を分ける。
+- 根拠として、該当ファイルパスと関数/クラス名を必ず添える。
 
-## 1. Surface code の対応状況と実装範囲
+## 1. 対象となるグラフ構造と実装範囲
 
 ### 1.1 結論
 
-- `明示的記述`: この repo は surface code に一部対応している。README の supported code families に `Sycamore Surface Codes` が列挙されている。
+- `明示的記述`: この repo は surface-code 向けのマッチング処理を「実装またはラップ」している。README は `Sycamore Surface Codes` を supported code family に含め、classical decoder として `PyMatching` と `BPOSD` を列挙している。
   - 根拠: `README.md`, セクション `Scope`
-- `明示的記述`: 実コードとして読み込まれる surface code 実装は `graphqec/qecc/surface_code/google_block_memory.py` の `SycamoreSurfaceCode` である。
+- `明示的記述`: benchmark 側は surface-code 実装 `SycamoreSurfaceCode` に対して `PyMatching`, `BPOSD`, `SlidingWindowBPOSD` を生成する。
+  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`; `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`
+- `推論`: この repo で「マッチングを直接解く」経路は `PyMatching` ラッパーであり、`BPOSD` と `SlidingWindowBPOSD` は同じ detector graph 入力を使う別系統のグラフ復号器である。
+  - 根拠: `graphqec/decoder/pymatching.py`, クラス `PyMatching`; `graphqec/decoder/bposd.py`, クラス `BPOSD`; `graphqec/decoder/slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD`
+
+### 1.2 surface code 実装の範囲
+
+- `明示的記述`: repo 内で実際に読み込まれる surface-code 実装は `graphqec/qecc/surface_code/google_block_memory.py` の `SycamoreSurfaceCode` である。
   - 根拠: `graphqec/qecc/__init__.py`, `try: from .surface_code.google_block_memory import *`; `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`
-- `明示的記述`: `graphqec/qecc/__init__.py` は `RotatedSurfaceCode` と `ZuchongzhiSurfaceCode` を条件付き import するが、対応ファイル `stim_block_memory.py` / `ustc_block_memory.py` は repo 内に存在しない。
-  - 根拠: `graphqec/qecc/__init__.py`, `try` import 節; repo 全体のファイル一覧
-- `推論`: この repo 内で実際に調査可能な surface code 実装範囲は、Google/Sycamore 実験データを前提にした `SycamoreSurfaceCode` に限られる。generic な rotated planar surface code 実装は、少なくともこの checkout には同梱されていない。
-  - 根拠: `graphqec/qecc/__init__.py`, 関数 `get_code`; `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`
-
-### 1.2 対象ディレクトリ
-
-- `graphqec/qecc/surface_code/`
-  - `google_block_memory.py`
-  - `google_utils.py`
-- `graphqec/benchmark/evaluate.py`
-  - `benchmark_sycamore_acc`
-- `graphqec/benchmark/evaluate_sycamore.py`
-  - Sycamore 実験評価の旧系エントリポイント
-- `graphqec/decoder/*`
-  - `PyMatching`, `BPOSD`, `SlidingWindowBPOSD`, neural decoder 群はいずれも `SycamoreSurfaceCode.get_dem()` または `get_tanner_graph()` を通じて surface code に接続される
-
-### 1.3 どの surface code か
-
-- `明示的記述`: 実装名と README 上の名称は `Sycamore Surface Codes` / `SycamoreSurfaceCode` である。
-  - 根拠: `README.md`, セクション `Scope`; `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`
-- `明示的記述`: profile は `Gd3X_N/E/S/W`, `Gd3Z_N/E/S/W`, `Gd5X`, `Gd5Z` に限定されている。
+- `明示的記述`: `RotatedSurfaceCode` と `ZuchongzhiSurfaceCode` は条件付き import だが、対応ファイル `stim_block_memory.py` / `ustc_block_memory.py` はこの checkout に存在しない。
+  - 根拠: `graphqec/qecc/__init__.py`, 条件付き import 節
+- `明示的記述`: `SycamoreSurfaceCode` が持つ profile は `Gd3X_N/E/S/W`, `Gd3Z_N/E/S/W`, `Gd5X`, `Gd5Z` に限定される。
   - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス属性 `_PROFILES`
-- `明示的記述`: 実装は `basis` を `X` または `Z` として扱い、実験データのパスも `surface_code_b{basis}_d{distance}_...` の形式で選択する。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `QECDataGoogleFormat.__init__`
-- `明示的記述`: `remove_irrelevent_detectors` の docstring は `since it is a CSS code` としており、実装も detector を半分だけ保持する前提を置いている。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `remove_irrelevent_detectors`
-- `推論`: repo 内根拠から確認できるのは「Sycamore の CSS 系 surface code」であり、`rotated planar XXZZ` か `XZZX` かを repo 内の明示記述だけで断定することはできない。少なくとも `XZZX` を明示するコード・docstring・config は見当たらない。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `remove_irrelevent_detectors`; `README.md`, セクション `Scope`; repo 全体検索結果
+- `推論`: この checkout で確認できる surface-code マッチング対象は、Google/Sycamore 実験データに依存する CSS 系 surface code に限られる。generic な rotated planar XXZZ / XZZX を独自に生成するコードは同梱されていない。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`; `graphqec/qecc/__init__.py`, 条件付き import 節
+- `未確認`: `XXZZ` と `XZZX` の別を repo 内の明示記述だけで断定できる証拠は見つからない。
 
-### 1.4 実装上の制約
+### 1.3 グラフの制約
 
-- `明示的記述`: 実験データソースは `google` 固定である。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `QECDataGoogleFormat.__init__`
-- `明示的記述`: `QEC_DATA_PATH` 環境変数が必須で、外部 Sycamore データが同梱されていない。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, module top-level; `README.md`, セクション `Assets`; `scripts/check_reproducibility.py`, 関数 `validate_config`
-- `明示的記述`: `get_exp_data` は odd cycle のみを許し、`assert (num_cycle+1) % 2 == 1` を持つ。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_exp_data`
-- `明示的記述`: 初期化時にロードする実データは `for r in range(1,26,2)` で、1,3,...,25 cycle のみ。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.__init__`
-- `明示的記述`: parity 分岐付きの incremental circuit は `num_cycle <= 24` に制限される。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_syndrome_circuit`; 関数 `SycamoreSurfaceCode.get_exp_data`
-- `推論`: benchmark/運用上の repeated syndrome rounds は 25 round までの odd-round memory experiment に実質制限されている。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.__init__`, `SycamoreSurfaceCode.get_exp_data`
-- `推論`: multi-logical qubit は対象外である可能性が高い。`_get_tanner_graph` は `data_to_logical` を `(data_idx, 0)` のみで構築しており、複数 logical observable へ一般化していない。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode._get_tanner_graph`
-- `推論`: rectangular patch 対応の証拠はない。`distance` は単一スカラーで、profile も `d=3,5` のみである。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス属性 `_PROFILES`; 関数 `SycamoreSurfaceCode.__init__`
-- `推論`: even distance 一般対応の証拠はない。constructor は `distance` を受けるが、同梱 profile は odd の 3 と 5 のみで、外部データ依存のため追加距離を repo 単体では確認できない。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス属性 `_PROFILES`; 関数 `QECDataGoogleFormat.__init__`
-- `未確認`: open boundary / closed boundary の別を repo 内 docstring や README が明示していない。
-- `未確認`: `rotated planar XXZZ` と明示する記述は repo 内で未発見。
-- `未確認`: lattice surgery, patch merge/split, multi-patch routing に関する API は未発見。
+- `明示的記述`: classical decoder の入力は `stim.DetectorErrorModel` であり、surface-code 側では `get_syndrome_circuit(num_cycle, parity=...).detector_error_model()` から得られる。
+  - 根拠: `graphqec/qecc/code.py`, 抽象メソッド `QuantumCode.get_dem`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`
+- `明示的記述`: `SycamoreSurfaceCode.get_syndrome_circuit` は `num_cycle == 0` と `num_cycle > 0` を分け、`num_cycle > 0` では repeated syndrome rounds を含む full circuit を構築する。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_syndrome_circuit`
+- `推論`: repo は code-capacity 専用の 2D matching graph を別実装していない。実際には `num_cycle` で長さの変わる detector-history graph を DEM として扱い、`num_cycle > 0` では 3D 時空間グラフ相当の入力を想定している。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`, `SycamoreSurfaceCode.get_syndrome_circuit`; `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
+- `明示的記述`: repo 側の detector-graph 表現は明示的な boundary node オブジェクトを持たず、`detector_graph[d, e]` 形式の detector-error incidence matrix を使う。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
+- `推論`: boundary に相当する「単一 detector を持つ error instruction」は incidence matrix の 1 列として保持できるが、repo 独自の named boundary node は作られない。boundary の意味付けは Stim DEM または外部ライブラリ側に委ねられている。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`; `graphqec/decoder/pymatching.py`, 関数 `_process_batch`
+- `明示的記述`: 実験データ経路は odd cycle のみを許し、`num_cycle <= 24` に制限される。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_exp_data`, `SycamoreSurfaceCode.get_syndrome_circuit`
 
-### 1.5 Capability Matrix
+### 1.4 Capability Matrix
 
-| code family | patch shape | single/multi logical qubit | boundaries | odd distance restriction | repeated syndrome rounds | measurement error support | active correction support | lattice surgery | benchmark scripts | neural decoder |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `SycamoreSurfaceCode` (`basis=X/Z`, Google experimental dataset-backed CSS surface code) | `明示的記述`: 単一 `distance` 指定の patch。`推論`: square patch を示唆。rectangular は証拠なし | `推論`: single logical qubit 前提が強い。multi-logical の一般化なし | `未確認` | `明示的記述`: bundled profile は `d=3,5` のみ。`推論`: odd-distance 実用限定 | `明示的記述`: odd rounds 1..25 の実験データ。incremental circuit は parity 付きで `<=24` | `明示的記述`: あり。detector error model と detection events を扱う | `明示的記述`: decoder 出力は observable flip 予測。`推論`: active correction feed-back は未対応 | `未確認` ではなく `設計上対象外の証拠が濃い`: 対応 API/回路操作が存在しない | `明示的記述`: `graphqec/benchmark/evaluate.py` に `benchmark_sycamore_acc`、`graphqec/benchmark/evaluate_sycamore.py` に旧 benchmark | `明示的記述`: `GraphRNNDecoderV5A`, `GraphLinearAttnDecoderV2A` を `build_neural_decoder` で接続可能 |
+| Implementation | Graph dimension (2D/3D) | Boundary node support | Weighted edges support | Hyperedge support (for correlated/Y errors) | Dynamic graph generation | Parallel matching support |
+| --- | --- | --- | --- | --- | --- | --- |
+| `PyMatching` | `明示的記述`: `get_dem(num_cycle, ...)` の DEM を入力にする。`推論`: `num_cycle=0` 相当の短い graph と repeated-round の 3D detector history の両方を取り得る | `推論`: repo 側で boundary node を構築しない。DEM を `Matching.from_detector_error_model(dem)` にそのまま渡す | `推論`: repo 側は重みを計算せず DEM をそのまま渡すので、重み処理は外部ライブラリ依存 | `明示的記述`: repo 側で pair-edge 化せず DEM をそのまま渡す。`推論`: 多体 error の扱いは PyMatching 側依存 | `明示的記述`: `num_cycle` ごとに `get_dem` を呼んで decoder を作る | `明示的記述`: multiprocessing / submitit で batch 並列化 |
+| `BPOSD` | `明示的記述`: DEM を `detector_graph` に変換して使う。`推論`: DEM が repeated rounds を含めば 3D detector-history graph をそのまま列化して扱う | `推論`: 明示 boundary node なし。単一 detector 列は保持可能 | `明示的記述`: `priors` を `channel_probs` として `BpOsdDecoder` に渡す | `明示的記述`: `dem_to_detector_graph` は detector/observable の任意列を保持する。`simplify_dem` も identical hyper-edge をまとめる | `明示的記述`: `get_dem(num_cycle, ...)` から毎回生成 | `明示的記述`: multiprocessing / submitit で batch 並列化 |
+| `SlidingWindowBPOSD` | `明示的記述`: DEM を detector matrix に変換後、`num_detectors_per_cycle` で時系列 window に分割する。`推論`: repeated rounds を前提とした 3D detector-history 向け | `推論`: 明示 boundary node なし。`dem_to_detector_graph` の列表現に依存 | `明示的記述`: `priors` を window ごとに `BpOsdDecoder` へ渡す | `明示的記述`: 基底の `chk` 行列は任意列を保持する | `明示的記述`: `num_cycle` ごとに DEM を作り直す | `明示的記述`: multiprocessing / submitit で batch 並列化 |
 
-### 1.6 未対応理由の切り分け
+Capability Matrix の根拠:
+- `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`
+- `graphqec/decoder/pymatching.py`, クラス `PyMatching`
+- `graphqec/decoder/bposd.py`, クラス `BPOSD`
+- `graphqec/decoder/slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD`
+- `graphqec/decoder/_slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD`
+- `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`, `simplify_dem`
 
-- generic surface code 実装
-  - 判定: `未実装ではなく、この checkout では同梱されていないため未確認`
-  - 根拠: `graphqec/qecc/__init__.py` は `RotatedSurfaceCode` / `ZuchongzhiSurfaceCode` を条件付き import するが、対応ファイル自体が repo 内にない
-- lattice surgery
-  - 判定: `設計上対象外の可能性が高い`
-  - 根拠: `SycamoreSurfaceCode` の API は memory experiment 相当の `get_syndrome_circuit`, `get_dem`, `get_exp_data`, `get_tanner_graph` に閉じており、patch merge/split や複数 logical patch を表す API がない
-- rectangular patch / arbitrary geometry
-  - 判定: `未実装の可能性が高い`
-  - 根拠: `distance` 単独指定と固定 profile のみで、長方形サイズや境界種別を指定する引数が存在しない
+## 2. グラフ構築とエッジ重みの計算
 
-## 2. 対象ノイズモデル
+### 2.1 シンドロームグラフはどう構築されるか
 
-### 2.1 デコーダ実装が仮定するノイズモデル
+- `明示的記述`: surface-code 実装は外部 Sycamore データセットの `circuit_detector_error_model.dem` と `circuit_noisy.stim` / `circuit_ideal.stim` を読み込む。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `QECDataGoogleFormat.__init__`, `QECDataGoogleFormat.get_dem`, `QECDataGoogleFormat.get_circuit`
+- `明示的記述`: `SycamoreSurfaceCode.get_dem` は `get_syndrome_circuit(...).detector_error_model()` を返す。surface code 用に detector graph を handcraft する関数はない。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`
+- `明示的記述`: `dem_to_detector_graph` は DEM を `detector_graph: bool[num_detectors, num_errors]`, `obs_graph: bool[num_observables, num_errors]`, `priors: float[num_errors]` に変換する。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
+- `推論`: この repo における「シンドロームグラフ」は NetworkX のような明示 adjacency graph ではなく、Stim DEM を列ごとの error event incidence matrix に落とした表現である。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
 
-#### 2.1.1 DEM ベース classical decoder (`BPOSD`, `PyMatching`, `SlidingWindowBPOSD`)
+### 2.2 Code capacity (2D) と repeated rounds (3D) の差
 
-- `明示的記述`: いずれも `test_code.get_dem(num_cycle, ...)` を入力に初期化される。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`
-- `明示的記述`: `BPOSD` は DEM を `detector_graph`, `obs_graph`, `priors` に変換し、BP+OSD を detector graph 上で実行する。
-  - 根拠: `graphqec/decoder/bposd.py`, クラス `BPOSD.__init__`, `BPOSD.get_result`; `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
-- `明示的記述`: `SlidingWindowBPOSD` も DEM を detector graph に変換し、detector 行列を時系列 window に分割して `BpOsdDecoder` を回す。
-  - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD.__init__`, `SlidingWindowBPOSD.decode`
-- `明示的記述`: `PyMatching` は DEM をそのまま `Matching.from_detector_error_model(dem)` に渡す。
+- `明示的記述`: `SycamoreSurfaceCode.get_syndrome_circuit(num_cycle=0)` は `_cycle0` を返し、`num_cycle>0` では `construct_full_circuit_from_blocks(..., num_cycle)` を使う。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_syndrome_circuit`
+- `明示的記述`: dataloader は raw detector events を `encoding_syndromes`, `cycle_syndromes`, `readout_syndromes` に分割し、`cycle_syndromes` を `[batch, num_cycle, num_detectors_per_round]` に reshape する。
+  - 根拠: `graphqec/decoder/nn/dataloader.py`, クラス `ExperimentDataset.__getitem__`, `SimDataset.__getitem__`, `IncrementalSimDataset.__getitem__`
+- `推論`: repeated rounds の有無は「別 graph generator」ではなく、raw detector vector の長さと reshape 規則、および DEM の detector 数の違いとして表現される。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_syndrome_circuit`; `graphqec/decoder/nn/dataloader.py`, 各 `__getitem__`
+- `未確認`: phenomenological noise と circuit-level noise を surface-code 専用 API で切り替えるフラグは見当たらない。repo 内では Google 実データ由来 circuit/DEM を使う経路が主である。
+
+### 2.3 エッジ重みの計算・保持
+
+- `明示的記述`: `dem_to_detector_graph` は各 `error(p)` instruction の確率 `p` をそのまま `priors[i]` に格納する。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
+- `明示的記述`: `BPOSD` と `SlidingWindowBPOSD` はその `priors` を `BpOsdDecoder(..., channel_probs=priors)` に渡す。
+  - 根拠: `graphqec/decoder/bposd.py`, 関数 `_create_decoder`; `graphqec/decoder/_slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
+- `明示的記述`: `simplify_dem` は同一 hyper-edge の確率を `1 - (1 - old_p) * (1 - current_p)` で合成する。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `simplify_dem`
+- `推論`: repo 内では対数重み化や整数化への丸めは行っていない。保持されるのは float の error probability であり、PyMatching 側の重み化も repo 内コードでは明示されない。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`; `graphqec/decoder/pymatching.py`, 関数 `_process_batch`
+
+### 2.4 相関誤りと hyperedge
+
+- `明示的記述`: `dem_to_detector_graph` は 1 つの error instruction が何個の detector / observable を含んでも、その列をそのまま保持する。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
+- `明示的記述`: `simplify_dem` の docstring は「same hyper-edge」をまとめる処理であると明記している。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `simplify_dem`
+- `推論`: BPOSD / SlidingWindowBPOSD の repo 内表現は「独立した X graph と Z graph への完全分離」ではなく、DEM の列単位 error event をそのまま扱う設計である。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`; `graphqec/decoder/bposd.py`, クラス `BPOSD`; `graphqec/decoder/_slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD`
+- `明示的記述`: `PyMatching` wrapper も repo 側で X/Z 分離や hyperedge 分解をせず、`Matching.from_detector_error_model(dem)` に丸ごと委譲する。
   - 根拠: `graphqec/decoder/pymatching.py`, 関数 `_process_batch`
-- `推論`: これら classical decoder の前提は code-capacity ではなく、`detector` と `observable` を含む DEM 上の fault-event モデルである。特に repeated syndrome rounds と measurement error を含む detector history を入力にしているため、repo 内 surface-code path では phenomenological より circuit-level / detector-level に近い。
-  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`
-- `明示的記述`: `SlidingWindowBPOSD` は `num_detectors_per_cycle` を必要とし、detector 行列を half-cycle 単位で window 化する。
+- `未確認`: Y error や multi-detector correlated event を PyMatching が内部でどう扱うかは、この repo 内コードだけでは確認できない。
+
+## 3. マッチングアルゴリズムの概要
+
+### 3.1 PyMatching
+
+- `明示的記述`: `PyMatching` wrapper のコアは `Matching.from_detector_error_model(dem)` と `decoder.decode_batch(batch_syndromes)` である。
+  - 根拠: `graphqec/decoder/pymatching.py`, 関数 `_process_batch`
+- `明示的記述`: repo は PyMatching を外部依存として使う。
+  - 根拠: `README.md`, セクション `Scope`; `pyproject.toml`, dependencies; `graphqec/decoder/pymatching.py`, `from pymatching import Matching`
+- `推論`: repo 内に MWPM 本体のスクラッチ実装はない。matching の中核アルゴリズムは PyMatching 依存である。
+  - 根拠: `graphqec/decoder/pymatching.py`, クラス `PyMatching`
+
+### 3.2 BPOSD
+
+- `明示的記述`: `BPOSD` は `ldpc.BpOsdDecoder` を使い、`bp_method="minimum_sum"` と `osd_method="osd_cs"` を指定する。
+  - 根拠: `graphqec/decoder/bposd.py`, 関数 `_create_decoder`
+- `明示的記述`: pipeline は `DEM -> simplify_dem -> dem_to_detector_graph -> BpOsdDecoder.decode(syndrome) -> errs @ obs_graph.T mod 2` である。
+  - 根拠: `graphqec/decoder/bposd.py`, クラス `BPOSD.__init__`, `BPOSD.get_result`
+- `推論`: これは MWPM ではなく、belief propagation + ordered statistics decoding による detector-graph 復号である。
+  - 根拠: `graphqec/decoder/bposd.py`, 関数 `_create_decoder`
+
+### 3.3 SlidingWindowBPOSD
+
+- `明示的記述`: `SlidingWindowBPOSD` は `dem_to_detector_graph` で得た `chk` 行列を `num_detectors_per_cycle` と `half_cycle` に基づいて時間窓へ分割する。
   - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD.__init__`, `_initialize_regions_and_windows`
-- `推論`: `SlidingWindowBPOSD` は repeated syndrome rounds を強く前提としており、surface-code memory 実験向けの時系列 detector 構造を仮定している。
+- `明示的記述`: 各窓で `BpOsdDecoder` を生成し、部分 syndrome を decode し、commit 済み部分だけ `total_error_hat` に反映する。
+  - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
+- `推論`: repeated syndrome rounds を持つ長い detector history を低メモリに処理するための近似的な時系列分割復号器であり、pair matching を直接返す実装ではない。
   - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD`
 
-#### 2.1.2 Neural decoder (`GraphRNNDecoderV5A`, `GraphLinearAttnDecoderV2A`)
+## 4. 入出力インターフェースとデータ構造
 
-- `明示的記述`: neural decoder は解析的なノイズ重み計算を持たず、raw syndrome を `(encoding_syndromes, cycle_syndromes, readout_syndromes)` に分けて学習済みモデルへ通す。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder._decode`; クラス `GraphRNNDecoderV5._simple_forward`; クラス `GraphLinearAttnDecoderV2._simple_forward`
-- `推論`: neural decoder のロジック自体は code-capacity / phenomenological / circuit-level のいずれにも固定されていない。前提ノイズモデルは、学習時・推論時に与えられるデータ分布に依存する。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder`; `graphqec/decoder/nn/train_utils.py`, 関数 `get_dataloaders`
+### 4.1 入力データ: グラフ
 
-#### 2.1.3 measurement error / 相関誤り / Y 誤り / biased noise
+- `明示的記述`: classical decoder の graph 入力型は `stim.DetectorErrorModel` である。
+  - 根拠: `graphqec/decoder/bposd.py`, クラス `BPOSD.__init__`; `graphqec/decoder/pymatching.py`, クラス `PyMatching.__init__`; `graphqec/decoder/slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD.__init__`
+- `明示的記述`: repo 内部ではそれを `detector_graph`, `obs_graph`, `priors` の NumPy 配列へ変換する。
+  - 根拠: `graphqec/qecc/utils.py`, 関数 `dem_to_detector_graph`
+- `明示的記述`: neural decoder 用 graph 入力は `TemporalTannerGraph` であり、`default_graph: TannerGraph` と `time_slice_graphs: Dict[int, TannerGraph]` を持つ。
+  - 根拠: `graphqec/qecc/code.py`, dataclass `TemporalTannerGraph`
+- `明示的記述`: `TannerGraph` は `data_nodes`, `check_nodes`, `data_to_check`, `data_to_logical` を `np.ndarray | torch.Tensor` で持つ。
+  - 根拠: `graphqec/qecc/code.py`, dataclass `TannerGraph`
 
-- `明示的記述`: measurement error は detector history に含まれる。`get_exp_data` は `detection_events.b8` を読み、benchmark でも `sampler.sample()` の syndrome を decoder に渡す。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `QECDataGoogleFormat.get_events`, `SycamoreSurfaceCode.get_exp_data`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`
-- `明示的記述`: `reverse_engineer_stim_circuit_then_split_into_two_parts` は DEM から representative error を選び、1 体または 2 体の generic `E` fault として circuit に戻す。
-  - 根拠: `graphqec/qecc/surface_code/google_utils.py`, 関数 `reverse_engineer_stim_circuit_then_split_into_two_parts`; 関数 `_replace_errors_with_representation`
-- `推論`: repo は single-qubit X/Z のみには限定されていない。少なくとも DEM から復元される 1 体・2 体の generic Pauli fault を扱えるため、Y 誤りや 2 体相関誤りを排除していない。
-  - 根拠: `graphqec/qecc/surface_code/google_utils.py`, 関数 `_replace_errors_with_representation`
-- `明示的記述`: `BPOSD` は identical hyper-edge を `simplify_dem` でまとめるが、hyper-edge 自体は detector/observable の集合として保持される。
-  - 根拠: `graphqec/decoder/bposd.py`, クラス `BPOSD.__init__`; `graphqec/qecc/utils.py`, 関数 `simplify_dem`
-- `推論`: BPOSD / SlidingWindowBPOSD は graph-like pair-edge 専用ではなく、DEM の列として表現された相関 detector event を扱う。ただし `PyMatching` については repo 側で hyper-edge 分解をしていないため、対応範囲は `Matching.from_detector_error_model` 任せである。
-  - 根拠: `graphqec/decoder/bposd.py`, クラス `BPOSD`; `graphqec/decoder/pymatching.py`, 関数 `_process_batch`
-- `明示的記述`: surface-code path に biased-noise 用のパラメータや重み付け分岐はない。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`; `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`
-- `未確認`: external Google DEM に実際どの程度の高次相関誤りが含まれているかは、この repo 単体では確認できない。
+### 4.2 入力データ: シンドローム
 
-### 2.2 ベンチマーク / シミュレーションスクリプトが実際に使うノイズモデル
-
-#### 2.2.1 surface code 実験 benchmark (`sycamore_acc`)
-
-- `明示的記述`: `benchmark_sycamore_acc` は `test_code.get_exp_data(r - 1, parity=parity)` を直接読み、実験由来の detection events と observable flips を評価する。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`
-- `推論`: この benchmark は code-capacity / phenomenological / circuit-level の synthetic model ではなく、実験データ評価である。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `QECDataGoogleFormat.get_events`, `QECDataGoogleFormat.get_obs_flips`; `README.md`, セクション `Assets`
-
-#### 2.2.2 surface code の synthetic simulation / dataloader
-
-- `明示的記述`: `IncrementalSimDataset` と `SimDataset` は `stim.FlipSimulator` を `code.get_syndrome_circuit(...)` に対して実行する。
-  - 根拠: `graphqec/decoder/nn/dataloader.py`, クラス `IncrementalSimDataset.__getitem__`, `SimDataset.__getitem__`
-- `明示的記述`: `SycamoreSurfaceCode.get_syndrome_circuit` は、Google 実データ由来の noisy circuit / DEM から作られた incremental circuit を返す。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode.__init__`; 関数 `SycamoreSurfaceCode.get_syndrome_circuit`; 関数 `build_incremental_circuits`
-- `推論`: repo 内の surface-code synthetic simulation は circuit-level に近い detector-event model を使っている。理由は、noisy circuit と DEM を元に `stim` circuit を再構成して `FlipSimulator` でサンプルしているため。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`; `graphqec/qecc/surface_code/google_utils.py`, 関数 `reverse_engineer_stim_circuit_then_split_into_two_parts`
-
-#### 2.2.3 `physical_error_rate` 引数の扱い
-
-- `明示的記述`: benchmark 共通コードは `test_code.get_dem(num_cycle, physical_error_rate=error_rate)` を呼ぶ。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`, `benchmark_batch_acc`, `benchmark_batch_time`
-- `明示的記述`: `SycamoreSurfaceCode.get_dem` / `get_syndrome_circuit` は `**kwargs` を受けるが、`physical_error_rate` を使わない。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`, `SycamoreSurfaceCode.get_syndrome_circuit`
-- `推論`: generic `acc` / `time` benchmark の `error_rate` sweep は surface-code path では実効的にノイズ強度を変えない。surface code で意味のある評価経路は repo 上は `sycamore_acc` または dataloader の `exp` / `sim` path である。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`, `benchmark_batch_acc`, `benchmark_batch_time`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`
-
-## 3. デコードアルゴリズムの概要
-
-### 3.1 DEM ベース classical pipeline
-
-#### 3.1.1 BPOSD
-
-- `明示的記述`: パイプラインは `DEM -> detector_graph/obs_graph/priors -> BpOsdDecoder -> estimated fault columns -> obs_graph との積 -> logical flip prediction` である。
-  - 根拠: `graphqec/decoder/bposd.py`, クラス `BPOSD.__init__`, `_process_batch`, `get_result`
-- `明示的記述`: public API の返り値は物理誤り列ではなく logical observable prediction である。
-  - 根拠: `graphqec/decoder/bposd.py`, 関数 `BPOSD.get_result`
-
-#### 3.1.2 PyMatching
-
-- `明示的記述`: パイプラインは `DEM -> Matching.from_detector_error_model(dem) -> decode_batch(raw_syndromes)` である。
-  - 根拠: `graphqec/decoder/pymatching.py`, 関数 `_process_batch`
-- `推論`: public API の出力は logical observable prediction である。理由は benchmark 側が `obs_flips` と直接比較しているため。
-  - 根拠: `graphqec/decoder/pymatching.py`, 関数 `_process_batch`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`, `benchmark_sycamore_acc`
-
-#### 3.1.3 SlidingWindowBPOSD
-
-- `明示的記述`: パイプラインは `DEM -> detector_graph/obs_graph/priors -> temporal region decomposition -> per-window BPOSD -> accumulated total_error_hat -> obs_graph で logical prediction` である。
-  - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, クラス `SlidingWindowBPOSD._initialize_regions_and_windows`, `SlidingWindowBPOSD.decode`
-- `明示的記述`: syndrome を window ごとに更新しながら `total_error_hat` を commit していく。
-  - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
-
-### 3.2 Neural decoder pipeline
-
-#### 3.2.1 GraphRNNDecoderV5A
-
-- `明示的記述`: 入力 bit を embedding し、`cycle_encoder` で check-to-data message passing を行い、cycle ごとに recurrent decoder state を更新し、最後に `data_to_logical` 辺で readout する。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `GraphRNNDecoderV5._simple_forward`, `GraphRNNDecoderV5._incremental_forward`
-- `明示的記述`: `encoding_syndromes`, `cycle_syndromes`, `readout_syndromes` を別々に扱う。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder._decode`; クラス `GraphRNNDecoderV5._simple_forward`
-
-#### 3.2.2 GraphLinearAttnDecoderV2A
-
-- `明示的記述`: encoder 部分は GraphRNN 系と同様に syndrome を埋め込み、decoder 部で sequence 全体をまとめて処理し、最後に `data_to_logical` で readout する。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `GraphLinearAttnDecoderV2._simple_forward`, `GraphLinearAttnDecoderV2._incremental_forward`
-
-### 3.3 surface-code variant の扱い方
-
-- `明示的記述`: `SycamoreSurfaceCode._get_tanner_graph` は qubit 座標から data/check node を作り、近傍 4 方向で `data_to_check` を張る。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode._get_tanner_graph`
-- `明示的記述`: initial / final time slice には `basis_mask` で絞った `masked_graph` を使い、中間 round には `default_graph` を使う。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode._get_tanner_graph`; `graphqec/qecc/code.py`, クラス `TemporalTannerGraph.__getitem__`
-- `明示的記述`: `remove_irrelevent_detectors` は `since it is a CSS code` として detector を半分に落とす設計である。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `remove_irrelevent_detectors`
-- `推論`: surface-code path では `X error -> Z-check matching`, `Z error -> X-check matching` を repo 独自に分離していない。classical decoder は full DEM を直接使い、neural decoder は single Tanner graph と detection-event sequence を使う。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`; `graphqec/decoder/bposd.py`, クラス `BPOSD`; `graphqec/decoder/pymatching.py`, クラス `PyMatching`; `graphqec/decoder/nn/models.py`, クラス `QECCDecoder`
-- `未確認`: XXZZ と XZZX を切り替える surface-code 専用分岐や明示的 naming は repo 内で未発見。
-
-### 3.4 surface-code で使えない decoder
-
-- `明示的記述`: `ConcatMatching` は `test_code.get_check_colors`, `get_check_basis`, `logical_basis` を要求する。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`
-- `明示的記述`: これらメソッド/属性は repo 内では `TriangleColorCode` にのみ定義され、`SycamoreSurfaceCode` には存在しない。
-  - 根拠: `graphqec/qecc/color_code/sydney_color_code.py`, 関数 `get_check_colors`, `get_check_basis`; `graphqec/qecc/surface_code/google_block_memory.py`, クラス `SycamoreSurfaceCode`
-- `推論`: `ConcatMatching` は surface-code path の有効 decoder ではない。
-  - 根拠: 上記 2 点
-
-## 4. 入出力インターフェースとデコードの運用形態
-
-### 4.1 Classical decoder (`BPOSD`, `PyMatching`, `SlidingWindowBPOSD`)
-
-- 入力データ
-  - `明示的記述`: `raw_syndromes: np.ndarray` で shape は `[num_shots, num_detectors]`。
+- `明示的記述`: classical decoder の public `decode` は `raw_syndromes: np.ndarray` を受け、shape は `[num_shots, num_detectors]` である。
   - 根拠: `graphqec/decoder/bposd.py`, 関数 `BPOSD.decode`; `graphqec/decoder/pymatching.py`, 関数 `PyMatching.decode`; `graphqec/decoder/slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
-- syndrome の定義
-  - `明示的記述`: stabilizer 値そのものではなく detector event である。benchmark は `sampler.sample(...)` の返す `syndromes` をそのまま decoder に渡し、実験データは `detection_events.b8` を読む。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`, `benchmark_batch_time`, `benchmark_sycamore_acc`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `QECDataGoogleFormat.get_events`
-  - `明示的記述`: final readout detector は final measurement record から `DETECTOR` 命令として再構成される。
-  - 根拠: `graphqec/qecc/surface_code/google_utils.py`, 関数 `reverse_engineer_stim_circuit_then_split_into_two_parts`
-- 出力データ
-  - `明示的記述`: public API は logical observable prediction を返す。`BPOSD` と `SlidingWindowBPOSD` は内部 error estimate を `obs_graph` で observable flip に変換する。
-  - 根拠: `graphqec/decoder/bposd.py`, 関数 `BPOSD.get_result`; `graphqec/decoder/_slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
-  - `推論`: `PyMatching` も logical observable prediction を返す。benchmark で `obs_flips` と直接比較しているため。
-  - 根拠: `graphqec/decoder/pymatching.py`, 関数 `_process_batch`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`
-- 運用形態
-  - `推論`: full correction ではなく logical readout-only decoding / Pauli-frame inference に相当する。public interface から物理 correction を circuit に返す機構はない。
-  - 根拠: `graphqec/decoder/bposd.py`, 関数 `BPOSD.get_result`; `graphqec/decoder/pymatching.py`, クラス `PyMatching`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`
+- `明示的記述`: surface-code 実験データは `detection_events.b8` から `stim.read_shot_data_file(..., num_detectors=self.raw_dem.num_detectors)` で読む。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `QECDataGoogleFormat.get_events`
+- `推論`: decoder に渡されるのは stabilizer 値そのものではなく detector event vector である。
+  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `QECDataGoogleFormat.get_events`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`, `benchmark_sycamore_acc`
 
-### 4.2 Neural decoder
+### 4.3 出力データ
 
-- 入力データ
-  - `明示的記述`: public `decode` は `raw_syndromes: np.ndarray` を受け、内部で `encoding_syndromes`, `cycle_syndromes`, `readout_syndromes` に分割する。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder._decode`
-  - `明示的記述`: dataloader 経路では `(encoding_syndromes, cycle_syndromes, readout_syndromes)` の `torch.Tensor` を返す。
-  - 根拠: `graphqec/decoder/nn/dataloader.py`, クラス `IncrementalSimDataset.__getitem__`, `ExperimentDataset.__getitem__`, `SimDataset.__getitem__`
-- syndrome の定義
-  - `明示的記述`: detector event を initial / cycle / readout に分解している。`readout_syndromes` は final detector 群であり、stabilizer の生値ではない。
-  - 根拠: `graphqec/decoder/nn/dataloader.py`, クラス `ExperimentDataset.__getitem__`, `SimDataset.__getitem__`
-- 出力データ
-  - `明示的記述`: model 本体は logical flip logit を返し、public `decode` は sigmoid 後に bool 予測または `return_prob=True` で確率を返す。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder._decode`
-- 運用形態
-  - `推論`: logical readout-only decoding である。物理 correction string や回路フィードバック API はない。
-  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder.decode`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`
+- `明示的記述`: `BPOSD.get_result` は `errs @ obs_graph.T mod 2` で observable flip 予測を返す。
+  - 根拠: `graphqec/decoder/bposd.py`, 関数 `BPOSD.get_result`
+- `明示的記述`: `_slidingwindow_bposd.SlidingWindowBPOSD.decode` も最後に `(total_error_hat @ self.obs.T) % 2` を返す。
+  - 根拠: `graphqec/decoder/_slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
+- `明示的記述`: `PyMatching.get_result` は `decode_batch` の返り値を連結して `bool` 化して返す。
+  - 根拠: `graphqec/decoder/pymatching.py`, 関数 `PyMatching.get_result`
+- `推論`: repo の public interface は「マッチングされた detector node のペア」や「採用 edge のリスト」を返さず、logical observable prediction を返す。
+  - 根拠: `graphqec/decoder/bposd.py`, 関数 `BPOSD.get_result`; `graphqec/decoder/pymatching.py`, 関数 `PyMatching.get_result`; `graphqec/decoder/_slidingwindow_bposd.py`, 関数 `SlidingWindowBPOSD.decode`
+- `未確認`: PyMatching 内部で得られる matching pair / correction edge を repo wrapper が取得する API は見当たらない。
 
-### 4.3 surface code 専用の補足
+### 4.4 コア関数・クラスのシグネチャ
 
-- `明示的記述`: `TemporalTannerGraph` は `time_slice_graphs={0: masked_graph, -1: masked_graph}` を持ち、initial/final round に別 graph を与える。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode._get_tanner_graph`
-- `推論`: これは初期 round と final readout round を、中間 syndrome round と同一視せず別扱いする設計である。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode._get_tanner_graph`; `graphqec/decoder/nn/models.py`, クラス `GraphRNNDecoderV5._simple_forward`
+- `graphqec/qecc/code.py`
+  - `QuantumCode.get_dem(self, num_cycle, **noise_kwargs) -> stim.DetectorErrorModel`
+  - `QuantumCode.get_tanner_graph(self) -> TemporalTannerGraph`
+- `graphqec/qecc/utils.py`
+  - `dem_to_detector_graph(dem: stim.DetectorErrorModel) -> Tuple[np.ndarray, np.ndarray, np.ndarray]`
+- `graphqec/decoder/bposd.py`
+  - `BPOSD.decode(self, raw_syndromes: np.ndarray, *, batch_size=100, non_blocking=False) -> np.ndarray[np.bool_]`
+  - `BPOSD.get_result(self)`
+- `graphqec/decoder/pymatching.py`
+  - `PyMatching.decode(self, raw_syndromes: np.ndarray, *, batch_size=100, non_blocking=False) -> np.ndarray[np.bool_]`
+  - `PyMatching.get_result(self)`
+- `graphqec/decoder/_slidingwindow_bposd.py`
+  - `SlidingWindowBPOSD.decode(self, syndromes: np.ndarray) -> np.ndarray`
+- `graphqec/decoder/slidingwindow_bposd.py`
+  - `SlidingWindowBPOSD.decode(self, raw_syndromes: np.ndarray, *, batch_size=100, non_blocking=False) -> np.ndarray[np.bool_]`
 
-## 5. Neural network 系アルゴリズムの対応
+## 5. Neural network 系アルゴリズムの適用
 
-### 5.1 inference 対応
+### 5.1 何に NN が使われているか
 
-- `明示的記述`: inference には対応している。`build_neural_decoder` が checkpoint を読み、`QECCDecoder.decode` が予測を返す。
-  - 根拠: `graphqec/decoder/nn/train_utils.py`, 関数 `build_neural_decoder`; `graphqec/decoder/nn/models.py`, クラス `QECCDecoder.decode`
+- `明示的記述`: README が neural decoders として `GraphRNNDecoderV5A` と `GraphLinearAttnDecoderV2A` を挙げる。
+  - 根拠: `README.md`, セクション `Scope`
+- `明示的記述`: benchmark 側は classical decoder 名以外を neural decoder とみなし、`test_code.get_tanner_graph().to(device)` を `build_neural_decoder` に渡す。
+  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_get_decoder`
+- `推論`: NN は matching edge や matching pair を直接出力していない。出力は logical flip logit / bool 予測であり、edge-weight inference API もない。
+  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder._decode`, `GraphRNNDecoderV5._simple_forward`, `GraphLinearAttnDecoderV2._simple_forward`
 
-### 5.2 training 対応
+### 5.2 グラフとシンドロームをどうテンソル化するか
 
-- `明示的記述`: dataloader 構築関数と optimizer/scheduler utility は存在する。
-  - 根拠: `graphqec/decoder/nn/train_utils.py`, 関数 `get_dataloaders`, `get_optimizer`, `construct_annealing_scheduler`
-- `明示的記述`: `get_dataloaders` は `incremental`, `exp`, `sim` の 3 種の入力データタイプを想定している。
-  - 根拠: `graphqec/decoder/nn/train_utils.py`, 関数 `get_dataloaders`
-- `明示的記述`: ただし `exp` / `sim` 分岐は `from graphqec.decoder.nn.trainer import CurriculumTeacher` を import するが、この repo には `graphqec/decoder/nn/trainer.py` が存在しない。
-  - 根拠: `graphqec/decoder/nn/train_utils.py`, 関数 `get_dataloaders`; repo ファイル一覧
-- `推論`: end-to-end training support はこの checkout では不完全である。少なくとも `exp` / `sim` training path は追加コードなしでは実行不能の可能性が高い。
-  - 根拠: 上記 2 点
-- `未確認`: `incremental` path を使う外部 training script が別 repo や未同梱ファイルに存在するかは未確認。
+- `明示的記述`: `TemporalTannerGraph` は `to(device)` で NumPy / Torch 間変換でき、decoder は `tanner_graph[0]`, `tanner_graph[...]`, `tanner_graph[-1]` を使い分ける。
+  - 根拠: `graphqec/qecc/code.py`, dataclass `TemporalTannerGraph`; `graphqec/decoder/nn/models.py`, クラス `QECCDecoder`, `GraphRNNDecoderV5._simple_forward`
+- `明示的記述`: raw detector vector は `encoding_syndromes`, `cycle_syndromes`, `readout_syndromes` に分割される。
+  - 根拠: `graphqec/decoder/nn/models.py`, 関数 `QECCDecoder._decode`; `graphqec/decoder/nn/dataloader.py`, 各 `__getitem__`
+- `明示的記述`: `GraphRNNDecoderV5` と `GraphLinearAttnDecoderV2` は syndrome bit を embedding し、`data_to_check` と `data_to_logical` を使って message passing / readout を行う。
+  - 根拠: `graphqec/decoder/nn/models.py`, クラス `GraphRNNDecoderV5._simple_forward`, `GraphLinearAttnDecoderV2._simple_forward`
+- `推論`: NN 系は「matching graph を解く」のではなく、「固定 Tanner graph 上で syndrome sequence から logical observable を直接分類する」設計である。
+  - 根拠: `graphqec/decoder/nn/models.py`, クラス `QECCDecoder`
 
-### 5.3 合成訓練データの生成方法
+## 6. マッチング処理のパフォーマンス・ベンチマーク
 
-- `incremental`
-  - `明示的記述`: 0..`max_num_cycle` の incremental circuit 群に対して `stim.FlipSimulator` を個別実行し、各 cycle の logical flips と final readout detector 群をスタックする。
-  - 根拠: `graphqec/decoder/nn/dataloader.py`, クラス `IncrementalSimDataset.__getitem__`
-  - `推論`: surface-code path では Google-derived circuit noise からの synthetic data 生成であり、`physical_error_rate` による明示的 p-sweep ではない。
-  - 根拠: `graphqec/decoder/nn/train_utils.py`, 関数 `get_dataloaders`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_syndrome_circuit`
-- `sim`
-  - `明示的記述`: 各 `num_cycle` ごとに単一 circuit を `FlipSimulator` でサンプルし、detector events と logical flips を返す。
-  - 根拠: `graphqec/decoder/nn/dataloader.py`, クラス `SimDataset.__getitem__`
-- `exp`
-  - `明示的記述`: synthetic ではなく実験データを使う。各 cycle の `ExperimentDataset` を作り、先頭 `num_train` 件を train、残りを validation に分ける。
-  - 根拠: `graphqec/decoder/nn/dataloader.py`, 関数 `get_exp_dataloaders`
+### 6.1 何が評価されているか
 
-## 6. ベンチマークの評価内容
-
-### 6.1 repo に同梱される benchmark config / 結果 artifact の有無
-
-- `明示的記述`: `configs/benchmark/` に同梱されている config は `ETHBBCode` と `TriangleColorCode` のみで、`SycamoreSurfaceCode` は含まれない。
-  - 根拠: `configs/benchmark/*.json` の一覧; `rg -n '"code_type"' configs/benchmark`
-- `明示的記述`: surface code 用の commit 済み benchmark 結果 artifact (`.csv`, `.pkl`, `.pt`) は repo 内で未発見。
-  - 根拠: repo 全体のファイル一覧
-- `推論`: surface code benchmark は「コードとしては存在する」が、「すぐ実行できる config と結果ファイル」は同梱されていない。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`; `configs/benchmark/` の一覧
-
-### 6.2 surface code で実装されている評価
-
-#### 6.2.1 `sycamore_acc`
-
-- `明示的記述`: 実験 data の per-cycle correctness を評価する。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`
-- `明示的記述`: post-processing は bootstrap により `accs`, `lfr`, `f0` を計算する。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_process_single_sycamore_job_results`
-- `推論`: これは logical memory 実験評価であり、1-shot readout benchmark ではない。理由は `test_cycles` に沿って複数 round の memory 成績を見て `fit_log_lfr` を当てているため。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_process_single_sycamore_job_results`
-
-#### 6.2.2 旧 benchmark (`evaluate_sycamore.py`)
-
-- `明示的記述`: 複数 checkpoint の `return_prob=True` 出力を soft voting で平均し、その accuracy / `lfr` / `f0` を bootstrap で計算する。
-  - 根拠: `graphqec/benchmark/evaluate_sycamore.py`, 関数 `benchmark_sycamore_acc`
-- `推論`: 旧 benchmark は ensemble inference 用であり、現行 `evaluate.py` の `benchmark_sycamore_acc` より評価運用が広い。
-  - 根拠: `graphqec/benchmark/evaluate_sycamore.py`, 関数 `init_experiment`, `benchmark_sycamore_acc`; `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`
-
-### 6.3 generic benchmark が評価するもの
-
-- `acc`
-  - `明示的記述`: `Logical Error Rate`, `Rigid Logical Error Rate`, および per-round 版を出す。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_process_single_acc_job_results`
-  - `明示的記述`: 生データは `preds != obs_flips` で数え、logical-qubit 単位失敗と shot 単位失敗の両方を集計する。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`
-- `time`
-  - `明示的記述`: decode latency (`Time mean`, `Time std`) を測る。正解率は評価しない。
+- `明示的記述`: generic `time` benchmark は decode latency の mean/std を測る。
   - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_time`, `_process_single_time_job_results`
-
-### 6.4 評価前提条件
-
-- `sycamore_acc`
-  - `明示的記述`: dataset 側に `parities` と `test_cycles` が必要。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `submit_benchmark`
-  - `明示的記述`: `get_exp_data(r - 1, parity=...)` を呼ぶため、実データ側は odd cycle 系列に制限される。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_exp_data`
-  - `明示的記述`: `lfr` fit は `test_cycles[1:]` を使い、最初の cycle 点を fit から外す。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `_process_single_sycamore_job_results`; `graphqec/benchmark/evaluate_sycamore.py`, 関数 `benchmark_sycamore_acc`
-  - `推論`: 評価対象は profile ごとに単一 basis (`Gd3X_*`, `Gd3Z_*`, `Gd5X`, `Gd5Z`) であり、logical Z 限定ではないが、1 回の task は 1 basis に固定される。
-  - 根拠: `graphqec/qecc/surface_code/google_block_memory.py`, クラス属性 `_PROFILES`
-- generic `acc`
-  - `明示的記述`: `num_fails_required` に達するまでサンプルを継続する停止条件である。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`
-- generic `time`
-  - `明示的記述`: warm-up 後に `num_evaluation` と `batch_size` から決まる batch 数だけ測定する。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_time`
-
-### 6.5 surface code benchmark に関する総括
-
-- `明示的記述`: surface code について repo が直接サポートする評価は、主に Sycamore 実験 detection events に対する logical-memory decoding accuracy である。
+- `明示的記述`: generic `acc` benchmark は `preds != obs_flips` に基づく logical error rate を評価する。
+  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`, `_process_single_acc_job_results`
+- `明示的記述`: `benchmark_sycamore_acc` は experiment 由来 detection events に対する logical-memory decoding accuracy を測る。
   - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_sycamore_acc`
-- `推論`: threshold 図や physical error rate sweep を伴う surface-code benchmark は、この checkout では主要経路ではない。generic benchmark code は存在するが、SycamoreSurfaceCode 側で `physical_error_rate` を消費しないためである。
-  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`, `benchmark_batch_time`; `graphqec/qecc/surface_code/google_block_memory.py`, 関数 `SycamoreSurfaceCode.get_dem`
+
+### 6.2 matching solver としての評価か
+
+- `推論`: repo にある評価の主対象は「logical observable prediction の精度 / 時間」であり、「matching pair の最適コスト」や「厳密解との差」ではない。
+  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_acc`, `benchmark_batch_time`, `benchmark_sycamore_acc`
+- `明示的記述`: `time` benchmark も decoder API の実行時間を測るだけで、グラフサイズや syndrome density ごとの詳細 scaling 指標は直接出力しない。
+  - 根拠: `graphqec/benchmark/evaluate.py`, 関数 `benchmark_batch_time`, `_process_single_time_job_results`
+- `未確認`: matching edge 数、matching cost、メモリ使用量、厳密 MWPM との差を surface-code matching solver として評価する専用スクリプトは repo 内で未発見。
+
+## 7. 未対応理由の切り分け
+
+- generic rotated-planar / toric surface-code matching
+  - 判定: `この checkout では未確認`
+  - 根拠: `graphqec/qecc/__init__.py` は条件付き import を置くが、対応 surface-code 実装ファイルが欠けている
+- explicit boundary-node graph builder
+  - 判定: `設計上対象外の可能性が高い`
+  - 根拠: repo は Stim DEM を中心に扱い、`dem_to_detector_graph` でも boundary node を独立データ構造にしていない
+- matching pair / edge list の出力
+  - 判定: `未実装の可能性が高い`
+  - 根拠: public decoder API は logical observable prediction しか返さない
+- neural network による matching edge 直接予測
+  - 判定: `未実装`
+  - 根拠: `graphqec/decoder/nn/models.py` は logical flip classification を返し、edge-level 出力 head がない

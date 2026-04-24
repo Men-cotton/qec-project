@@ -14,6 +14,9 @@ REQUIRED_KEYS = (
     "fullgraph_node_ids",
     "long_subgraph_boundary_node_ids",
     "fullgraph_boundary_node_ids",
+    "long_subgraph_MWPM_weight",
+    "long_subgraph_MWPM_is_valid",
+    "long_subgraph_MWPM_matching",
     "fullgraph_MWPM_weight",
     "fullgraph_MWPM_is_valid",
     "fullgraph_MWPM_matching",
@@ -239,14 +242,29 @@ def _build_undirected_edge_lookup(graph, source_file):
     return lookup
 
 
+def _read_mwpm_fields(raw, prefix, label, source_file):
+    weight_key = f"{prefix}_MWPM_weight"
+    valid_key = f"{prefix}_MWPM_is_valid"
+    matching_key = f"{prefix}_MWPM_matching"
+    weight = _require_number(raw[weight_key], weight_key, source_file)
+    is_valid = _require_bool(raw[valid_key], valid_key, source_file)
+    if not is_valid:
+        raise ValueError(
+            f"[{source_file}] {valid_key} is false; invalid {label} is not allowed"
+        )
+    return weight, is_valid, raw[matching_key]
+
+
 def _validate_teacher_matching(
     matching,
-    edge_lookup,
+    graph,
     regular_node_ids,
     boundary_node_ids,
     declared_weight,
     source_file,
+    label,
 ):
+    edge_lookup = _build_undirected_edge_lookup(graph, source_file)
     computed_weight = 0.0
     regular_counts = {node_id: 0 for node_id in regular_node_ids}
     boundary_counts = {node_id: 0 for node_id in boundary_node_ids}
@@ -257,8 +275,8 @@ def _validate_teacher_matching(
         edge_key = tuple(sorted((u, v)))
         if edge_key not in edge_lookup:
             raise ValueError(
-                f"[{source_file}] teacher matching pair at index {i} does not exist "
-                f"in fullgraph: {(u, v)}"
+                f"[{source_file}] {label} matching pair at index {i} does not exist "
+                f"in {graph['name']}: {(u, v)}"
             )
         computed_weight += edge_lookup[edge_key]
 
@@ -280,20 +298,20 @@ def _validate_teacher_matching(
 
     if missing_regular:
         raise ValueError(
-            f"[{source_file}] teacher matching does not cover all regular nodes; "
+            f"[{source_file}] {label} matching does not cover all regular nodes; "
             f"missing: {missing_regular}"
         )
     if reused_regular:
         raise ValueError(
-            f"[{source_file}] teacher matching reuses regular nodes: {reused_regular}"
+            f"[{source_file}] {label} matching reuses regular nodes: {reused_regular}"
         )
     if reused_boundary:
         raise ValueError(
-            f"[{source_file}] teacher matching reuses boundary nodes: {reused_boundary}"
+            f"[{source_file}] {label} matching reuses boundary nodes: {reused_boundary}"
         )
     if not math.isclose(computed_weight, declared_weight, rel_tol=0.0, abs_tol=1e-9):
         raise ValueError(
-            f"[{source_file}] teacher matching weight mismatch: declared "
+            f"[{source_file}] {label} matching weight mismatch: declared "
             f"{declared_weight}, computed {computed_weight}"
         )
 
@@ -304,18 +322,14 @@ def convert_raw_to_canonical(raw, source_file):
     measurement_rounds = _require_int(
         raw["measurement_rounds"], "measurement_rounds", source_file
     )
-    fullgraph_mwpm_weight = _require_number(
-        raw["fullgraph_MWPM_weight"], "fullgraph_MWPM_weight", source_file
+    long_mwpm_weight, long_mwpm_is_valid, long_mwpm_matching = _read_mwpm_fields(
+        raw, "long_subgraph", "teacher", source_file
     )
-    fullgraph_mwpm_is_valid = _require_bool(
-        raw["fullgraph_MWPM_is_valid"], "fullgraph_MWPM_is_valid", source_file
+    fullgraph_mwpm_weight, fullgraph_mwpm_is_valid, fullgraph_mwpm_matching = (
+        _read_mwpm_fields(raw, "fullgraph", "reference", source_file)
     )
-    if not fullgraph_mwpm_is_valid:
-        raise ValueError(
-            f"[{source_file}] fullgraph_MWPM_is_valid is false; invalid teacher is not allowed"
-        )
 
-    _normalize_node_sets(
+    long_regular_ids, long_boundary_ids, _ = _normalize_node_sets(
         raw["long_subgraph_node_ids"],
         raw["long_subgraph_boundary_node_ids"],
         "long_subgraph",
@@ -335,7 +349,7 @@ def convert_raw_to_canonical(raw, source_file):
         "long_subgraph",
         source_file,
     )
-    teacher_graph = convert_graph(
+    reference_graph = convert_graph(
         raw["fullgraph"],
         raw["fullgraph_node_ids"],
         raw["fullgraph_boundary_node_ids"],
@@ -343,7 +357,14 @@ def convert_raw_to_canonical(raw, source_file):
         source_file,
     )
     teacher_matching = convert_matching(
-        raw["fullgraph_MWPM_matching"],
+        long_mwpm_matching,
+        long_regular_ids,
+        long_boundary_ids,
+        "long_subgraph_MWPM_matching",
+        source_file,
+    )
+    reference_matching = convert_matching(
+        fullgraph_mwpm_matching,
         full_regular_ids,
         full_boundary_ids,
         "fullgraph_MWPM_matching",
@@ -351,31 +372,47 @@ def convert_raw_to_canonical(raw, source_file):
     )
     _validate_teacher_matching(
         teacher_matching,
-        _build_undirected_edge_lookup(teacher_graph, source_file),
+        input_graph,
+        long_regular_ids,
+        long_boundary_ids,
+        long_mwpm_weight,
+        source_file,
+        "teacher",
+    )
+    _validate_teacher_matching(
+        reference_matching,
+        reference_graph,
         full_regular_ids,
         full_boundary_ids,
         fullgraph_mwpm_weight,
         source_file,
+        "reference",
     )
 
     canonical = {
         "meta": {
-            "schema_version": "phase1-v0.1",
+            "schema_version": "phase1-v0.2",
             "source_file": source_file,
             "code_distance": code_distance,
             "measurement_rounds": measurement_rounds,
             "input_graph_name": "long_subgraph",
-            "teacher_graph_name": "fullgraph",
+            "teacher_graph_name": "long_subgraph",
+            "reference_graph_name": "fullgraph",
             "notes": []
         },
         "graphs": {
             "input_graph": input_graph,
-            "teacher_graph": teacher_graph
+            "reference_graph": reference_graph
         },
         "teacher": {
+            "matching_weight": long_mwpm_weight,
+            "is_valid": long_mwpm_is_valid,
+            "matching": teacher_matching
+        },
+        "reference": {
             "matching_weight": fullgraph_mwpm_weight,
             "is_valid": fullgraph_mwpm_is_valid,
-            "matching": teacher_matching
+            "matching": reference_matching
         },
         "ignored": {
             "imperfect_fmu_matching": None
